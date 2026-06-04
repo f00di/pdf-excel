@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-This repository is in its initial setup phase. Security support will apply to the actively maintained `main` branch unless a release policy is added later.
+Security support applies to the actively maintained `main` branch unless a release policy is added later.
 
 ## Reporting a Vulnerability
 

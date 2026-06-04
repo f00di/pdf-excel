@@ -52,4 +52,18 @@ Feature requests should describe the workflow, not only the implementation. Incl
 
 ## Code Style
 
-When source code is added, this section should be updated with the project-specific formatter, linter, and test commands.
+This project uses a small Python package under `src/pdf_excel`.
+
+- Keep CLI behavior simple and documented in `README.md`.
+- Add focused tests in `tests/` for new behavior.
+- Run the test suite before opening a pull request:
+
+```sh
+PYTHONPATH=src python3 -m unittest discover -s tests
+```
+
+If the package is installed in your environment, this also works:
+
+```sh
+python -m unittest discover -s tests
+```
