@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Convert readable PDF tables into Excel workbooks in the browser."
+    >
+    <title>PDF Excel</title>
+    <link rel="stylesheet" href="web/styles.css">
+    <script type="module" src="web/app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32">
+              <path d="M8 4h11l5 5v23H8z"></path>
+              <path d="M19 4v6h6"></path>
+              <path d="M12 16h12M12 21h12M12 26h12M16 13v16M21 13v16"></path>
+            </svg>
+          </span>
+          <div>
+            <h1>PDF Excel</h1>
+            <p id="statusText" aria-live="polite">Choose a PDF to begin.</p>
+          </div>
+        </div>
+
+        <a
+          class="repo-link"
+          href="https://github.com/f00di/pdf-excel"
+          target="_blank"
+          rel="noreferrer"
+          title="GitHub repository"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 2C6.48 2 2 6.58 2 12.26c0 4.54 2.87 8.39 6.84 9.75.5.09.68-.22.68-.49l-.01-1.91c-2.78.62-3.37-1.22-3.37-1.22-.46-1.2-1.11-1.52-1.11-1.52-.91-.64.07-.63.07-.63 1.01.07 1.54 1.06 1.54 1.06.89 1.57 2.34 1.12 2.91.86.09-.66.35-1.12.63-1.37-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.31.1-2.71 0 0 .84-.28 2.75 1.05A9.27 9.27 0 0 1 12 6.97c.85 0 1.71.12 2.51.34 1.9-1.33 2.74-1.05 2.74-1.05.55 1.4.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9l-.01 2.84c0 .27.18.58.69.49A10.16 10.16 0 0 0 22 12.26C22 6.58 17.52 2 12 2z"
+            ></path>
+          </svg>
+          <span>GitHub</span>
+        </a>
+      </header>
+
+      <main class="workspace">
+        <section class="control-panel" aria-labelledby="pdfHeading">
+          <div class="panel-head">
+            <h2 id="pdfHeading">PDF</h2>
+            <span id="fileBadge" class="badge">No file</span>
+          </div>
+
+          <label id="dropZone" class="drop-zone" for="fileInput">
+            <svg class="drop-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v12"></path>
+              <path d="m7 8 5-5 5 5"></path>
+              <path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"></path>
+            </svg>
+            <strong>Drop PDF here</strong>
+            <span>Select file</span>
+          </label>
+          <input id="fileInput" type="file" accept="application/pdf,.pdf">
+
+          <dl class="file-meta">
+            <div>
+              <dt>Name</dt>
+              <dd id="fileName">None</dd>
+            </div>
+            <div>
+              <dt>Size</dt>
+              <dd id="fileSize">-</dd>
+            </div>
+            <div>
+              <dt>Pages</dt>
+              <dd id="pageCount">-</dd>
+            </div>
+          </dl>
+
+          <fieldset class="options">
+            <legend>Export</legend>
+            <label class="toggle">
+              <input id="textFallback" type="checkbox" checked>
+              <span class="switch" aria-hidden="true"></span>
+              <span>Text fallback</span>
+            </label>
+          </fieldset>
+
+          <div class="button-row">
+            <button id="convertButton" class="primary" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 3h8l5 5v13H6z"></path>
+                <path d="M14 3v6h5"></path>
+                <path d="M10 13h6M10 17h6"></path>
+              </svg>
+              <span>Convert</span>
+            </button>
+            <button id="downloadButton" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v12"></path>
+                <path d="m7 10 5 5 5-5"></path>
+                <path d="M5 20h14"></path>
+              </svg>
+              <span>Download</span>
+            </button>
+            <button
+              id="resetButton"
+              class="icon-button"
+              type="button"
+              title="Reset"
+              aria-label="Reset"
+              disabled
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7"></path>
+                <path d="M3 3v6h6"></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="progress" aria-hidden="true">
+            <span id="progressBar"></span>
+          </div>
+        </section>
+
+        <section class="preview-panel" aria-labelledby="previewHeading">
+          <div class="panel-head">
+            <h2 id="previewHeading">Preview</h2>
+            <span id="previewBadge" class="badge">Waiting</span>
+          </div>
+          <div class="preview-frame">
+            <canvas id="previewCanvas" hidden></canvas>
+            <div id="emptyPreview" class="empty-state">
+              <svg viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M14 4h14l10 10v30H14z"></path>
+                <path d="M28 4v11h10"></path>
+                <path d="M18 24h20M18 30h20M18 36h15"></path>
+              </svg>
+              <span>No preview</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="results-panel" aria-labelledby="resultsHeading">
+          <div class="panel-head">
+            <h2 id="resultsHeading">Sheets</h2>
+            <span id="sheetBadge" class="badge">0</span>
+          </div>
+          <div id="summary" class="summary">No workbook yet.</div>
+          <div id="sheetList" class="sheet-list"></div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

@@ -27,3 +27,6 @@ jobs:
 
       - name: Run tests
         run: python -m unittest discover -s tests
+
+      - name: Check browser app syntax
+        run: node --check web/app.js

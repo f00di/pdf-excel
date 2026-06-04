@@ -1,15 +1,28 @@
 # PDF Excel
 
-PDF Excel is a command line tool for converting tables from PDF documents into Excel workbooks.
+PDF Excel converts readable PDF content into Excel workbooks. It includes a browser app for GitHub Pages and a Python command line tool.
 
-It uses `pdfplumber` to extract PDF tables and `openpyxl` to write `.xlsx` files. If a page does not contain a detected table, the tool can fall back to writing the page text as a one-column sheet.
+The online app runs fully in the browser and downloads an `.xlsx` file. The CLI uses `pdfplumber` to extract PDF tables and `openpyxl` to write `.xlsx` files. If a page does not contain a detected table, both paths can fall back to writing the page text as a one-column sheet.
 
 ## Project Status
 
-This project includes a runnable Python package, a `pdf-excel` CLI command, unit tests, and GitHub Actions CI.
+This project includes a GitHub Pages app, a runnable Python package, a `pdf-excel` CLI command, unit tests, and GitHub Actions CI.
+
+## Use Online
+
+Open the GitHub Pages site:
+
+```text
+https://f00di.github.io/pdf-excel/
+```
+
+Drop a text-based PDF into the page, convert it, and download the generated workbook.
+
+The browser app is static HTML, CSS, and JavaScript in `index.html` and `web/`. It uses Mozilla PDF.js for browser PDF text extraction and SheetJS for workbook export.
 
 ## Features
 
+- Run online from GitHub Pages without a server.
 - Extract tables from text-based PDFs.
 - Export each detected table to its own Excel sheet.
 - Add text-only fallback sheets for pages without detected tables.
@@ -17,6 +30,22 @@ This project includes a runnable Python package, a `pdf-excel` CLI command, unit
 - Run as either `pdf-excel` or `python -m pdf_excel`.
 
 Scanned image-only PDFs usually need OCR before this tool can extract useful data.
+
+## Publish on GitHub Pages
+
+For a fork or a new repository, enable GitHub Pages with:
+
+```text
+Settings -> Pages -> Build and deployment -> Deploy from a branch
+Branch: main
+Folder: / (root)
+```
+
+After GitHub publishes the branch, the root `index.html` becomes the online converter at:
+
+```text
+https://<github-user>.github.io/pdf-excel/
+```
 
 ## Getting Started
 
@@ -78,8 +107,10 @@ python -m unittest discover -s tests
 ```text
 .
 ├── .github/              # GitHub templates and CI workflow
+├── web/                  # Browser app assets
 ├── src/pdf_excel/        # CLI and conversion package
 ├── tests/                # Unit tests
+├── index.html            # GitHub Pages browser app
 ├── CODE_OF_CONDUCT.md    # Community behavior expectations
 ├── CONTRIBUTING.md       # How to contribute
 ├── LICENSE               # MIT license
