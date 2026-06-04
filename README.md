@@ -2,7 +2,7 @@
 
 PDF Excel converts readable PDF content into Excel workbooks. It includes a browser app for GitHub Pages and a Python command line tool.
 
-The online app runs fully in the browser and downloads an `.xlsx` file. The CLI uses `pdfplumber` to extract PDF tables and `openpyxl` to write `.xlsx` files. If a page does not contain a detected table, both paths can fall back to writing the page text as a one-column sheet.
+The online app runs fully in the browser and downloads an `.xlsx` file. It can either create a new workbook from PDF tables or append detected transaction rows into an uploaded `.xlsx` / `.xlsm` workbook. The CLI uses `pdfplumber` to extract PDF tables and `openpyxl` to write `.xlsx` files. If a page does not contain a detected table, both paths can fall back to writing the page text as a one-column sheet.
 
 The Python package also includes a bank-statement append workflow. It can extract normalized transactions from statement PDFs, analyze an existing workbook, suggest field-to-column mappings, validate the append plan, and write an updated workbook while preserving styles and formulas.
 
@@ -28,6 +28,7 @@ The browser app is static HTML, CSS, and JavaScript in `index.html` and `web/`. 
 - Extract tables from text-based PDFs.
 - Export each detected table to its own Excel sheet.
 - Add text-only fallback sheets for pages without detected tables.
+- Upload an existing workbook in the browser and append detected transactions to a selected sheet.
 - Extract bank-statement transactions, including a Bank of America statement parser.
 - Append extracted transactions into an existing `.xlsx` or `.xlsm` workbook.
 - Detect target sheet headers, formulas, protected sheets, and the next append row.

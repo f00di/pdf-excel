@@ -60,7 +60,7 @@
             <strong>Drop PDF here</strong>
             <span>Select file</span>
           </label>
-          <input id="fileInput" type="file" accept="application/pdf,.pdf">
+          <input id="fileInput" type="file" accept="application/pdf,.pdf" multiple>
 
           <dl class="file-meta">
             <div>
@@ -76,6 +76,48 @@
               <dd id="pageCount">-</dd>
             </div>
           </dl>
+
+          <fieldset class="options workbook-options">
+            <legend>Workbook</legend>
+            <label class="workbook-picker" for="workbookInput">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 3h8l5 5v13H6z"></path>
+                <path d="M14 3v6h5"></path>
+                <path d="M9 13h7M9 17h7"></path>
+              </svg>
+              <span id="workbookPickText">Select Excel file</span>
+            </label>
+            <input
+              id="workbookInput"
+              type="file"
+              accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
+            >
+            <dl class="file-meta compact">
+              <div>
+                <dt>Name</dt>
+                <dd id="workbookName">None</dd>
+              </div>
+              <div>
+                <dt>Sheets</dt>
+                <dd id="workbookSheetCount">-</dd>
+              </div>
+            </dl>
+            <div class="field-grid">
+              <label>
+                <span>Target sheet</span>
+                <select id="targetSheet" disabled></select>
+              </label>
+              <label>
+                <span>Write mode</span>
+                <select id="writeMode">
+                  <option value="append">Append rows</option>
+                  <option value="skip_duplicates">Skip duplicates</option>
+                  <option value="overwrite">Overwrite from row</option>
+                </select>
+              </label>
+            </div>
+            <div id="mappingPreview" class="mapping-preview"></div>
+          </fieldset>
 
           <fieldset class="options">
             <legend>Export</legend>
@@ -94,6 +136,14 @@
                 <path d="M10 13h6M10 17h6"></path>
               </svg>
               <span>Convert</span>
+            </button>
+            <button id="appendButton" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14"></path>
+                <path d="M5 12h14"></path>
+                <path d="M4 4h16v16H4z"></path>
+              </svg>
+              <span>Append</span>
             </button>
             <button id="downloadButton" type="button" disabled>
               <svg viewBox="0 0 24 24" aria-hidden="true">
