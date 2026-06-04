@@ -4,6 +4,8 @@ PDF Excel converts readable PDF content into Excel workbooks. It includes a brow
 
 The online app runs fully in the browser and downloads an `.xlsx` file. The CLI uses `pdfplumber` to extract PDF tables and `openpyxl` to write `.xlsx` files. If a page does not contain a detected table, both paths can fall back to writing the page text as a one-column sheet.
 
+The Python package also includes a bank-statement append workflow. It can extract normalized transactions from statement PDFs, analyze an existing workbook, suggest field-to-column mappings, validate the append plan, and write an updated workbook while preserving styles and formulas.
+
 ## Project Status
 
 This project includes a GitHub Pages app, a runnable Python package, a `pdf-excel` CLI command, unit tests, and GitHub Actions CI.
@@ -26,6 +28,12 @@ The browser app is static HTML, CSS, and JavaScript in `index.html` and `web/`. 
 - Extract tables from text-based PDFs.
 - Export each detected table to its own Excel sheet.
 - Add text-only fallback sheets for pages without detected tables.
+- Extract bank-statement transactions, including a Bank of America statement parser.
+- Append extracted transactions into an existing `.xlsx` or `.xlsm` workbook.
+- Detect target sheet headers, formulas, protected sheets, and the next append row.
+- Suggest mappings from PDF fields to columns such as date, description, debit, credit, balance, and notes.
+- Skip duplicate-looking rows or overwrite from a chosen append row.
+- Preserve row styling, extend formulas where possible, highlight new cells, and add an append log sheet.
 - Refuse to overwrite existing outputs unless `--overwrite` is passed.
 - Run as either `pdf-excel` or `python -m pdf_excel`.
 
@@ -65,6 +73,12 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
+Optional capabilities can be installed with extras:
+
+```sh
+python -m pip install -e ".[ocr,encrypted,xls,ai]"
+```
+
 Convert a PDF:
 
 ```sh
@@ -77,16 +91,50 @@ Or run the module directly:
 python -m pdf_excel path/to/input.pdf --overwrite
 ```
 
+Append bank-statement transactions into an existing workbook:
+
+```sh
+pdf-excel statement.pdf --append-to budget.xlsx --sheet BoA -o budget_updated.xlsx
+```
+
+Skip duplicate-looking rows while appending:
+
+```sh
+pdf-excel statement.pdf --append-to budget.xlsx --write-mode skip_duplicates --overwrite
+```
+
+Append multiple PDFs to the default target sheet:
+
+```sh
+pdf-excel april.pdf may.pdf --append-to budget.xlsx
+```
+
 ## Command Options
 
 ```text
-usage: pdf-excel [-h] [-o OUTPUT] [--overwrite] [--no-text-fallback] pdf
+usage: pdf-excel [-h] [-o OUTPUT] [--append-to WORKBOOK] [--sheet SHEET]
+                 [--write-mode {append,skip_duplicates,overwrite}]
+                 [--overwrite] [--no-text-fallback] [--ocr]
+                 [--pdf-password PDF_PASSWORD]
+                 [--excel-password EXCEL_PASSWORD] [--no-highlight]
+                 [--use-ai-mapping]
+                 pdf [pdf ...]
 ```
 
-- `pdf`: source PDF file.
-- `-o, --output`: output `.xlsx` path. Defaults to the input filename with `.xlsx`.
+- `pdf`: source PDF file, or multiple PDFs when using `--append-to`.
+- `-o, --output`: output workbook path. Defaults to the input PDF name for conversion, or `<workbook>_updated.xlsx` / `<workbook>_updated.xlsm` for append mode.
+- `--append-to`: existing Excel workbook to update from statement PDF transactions.
+- `--sheet`: target sheet for append mode. Repeat for multiple sheets. Defaults to `BoA` when present, otherwise the first sheet.
+- `--write-mode`: append rows, skip duplicate-looking rows, or overwrite from the detected starting row.
 - `--overwrite`: replace an existing output file.
 - `--no-text-fallback`: only export detected tables.
+- `--ocr`: try OCR fallback for scanned PDFs when optional OCR dependencies and the Tesseract system binary are installed.
+- `--pdf-password`: password for encrypted statement PDFs.
+- `--excel-password`: password for encrypted Excel workbooks.
+- `--no-highlight`: do not highlight newly written cells in append mode.
+- `--use-ai-mapping`: optionally use OpenAI mapping when `OPENAI_API_KEY` and `OPENAI_MAPPING_MODEL` are configured; otherwise deterministic mapping is used.
+
+Append mode writes a new workbook and leaves the original workbook unchanged.
 
 ## Development
 

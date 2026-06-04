@@ -27,7 +27,15 @@ classifiers = [
 dependencies = [
   "openpyxl>=3.1.0",
   "pdfplumber>=0.11.0",
+  "python-dateutil>=2.9.0",
 ]
+
+[project.optional-dependencies]
+ai = ["openai>=1.40"]
+encrypted = ["msoffcrypto-tool>=5.4"]
+ocr = ["PyMuPDF>=1.24", "pytesseract>=0.3.10", "Pillow>=10.4"]
+xls = ["pandas>=2.2", "xlrd>=2.0"]
+dev = ["pytest>=8.2"]
 
 [project.scripts]
 pdf-excel = "pdf_excel.cli:main"
