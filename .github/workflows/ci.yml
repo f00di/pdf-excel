@@ -29,4 +29,6 @@ jobs:
         run: python -m unittest discover -s tests
 
       - name: Check browser app syntax
-        run: node --check web/app.js
+        run: |
+          node --check web/app.js
+          node --check web/workbook-patch.js

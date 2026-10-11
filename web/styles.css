@@ -547,6 +547,10 @@ button:disabled {
   font-weight: 800;
 }
 
+.empty-state[hidden] {
+  display: none;
+}
+
 .empty-state svg {
   width: 70px;
   height: 70px;
@@ -680,14 +684,17 @@ button:disabled {
   }
 
   .button-row {
-    grid-template-columns: 1fr;
-  }
-
-  .mapping-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
 
   .icon-button {
     width: 100%;
+  }
+}
+
+@media (max-width: 359px) {
+  .button-row,
+  .mapping-grid {
+    grid-template-columns: 1fr;
   }
 }

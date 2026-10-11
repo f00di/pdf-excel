@@ -20,7 +20,7 @@ https://f00di.github.io/pdf-excel/
 
 Drop a text-based PDF into the page, convert it, and download the generated workbook.
 
-The browser app is static HTML, CSS, and JavaScript in `index.html` and `web/`. It uses Mozilla PDF.js for browser PDF text extraction and SheetJS for workbook export.
+The browser app is static HTML, CSS, and JavaScript in `index.html` and `web/`. It uses Mozilla PDF.js for browser PDF text extraction, SheetJS for reading and exporting workbooks, and fflate to update uploaded workbooks without rebuilding them.
 
 ## Features
 
@@ -28,7 +28,8 @@ The browser app is static HTML, CSS, and JavaScript in `index.html` and `web/`. 
 - Extract tables from text-based PDFs.
 - Export each detected table to its own Excel sheet.
 - Add text-only fallback sheets for pages without detected tables.
-- Upload an existing workbook in the browser and append detected transactions to a selected sheet.
+- Upload an existing workbook in the browser and append detected transactions to a selected sheet. The browser edits the workbook file in place, so formatting, data validation, conditional formatting, tables, charts and macros are kept.
+- Write amounts and dates as real Excel numbers and dates, not text.
 - Extract bank-statement transactions, including a Bank of America statement parser.
 - Append extracted transactions into an existing `.xlsx` or `.xlsm` workbook.
 - Detect target sheet headers, formulas, protected sheets, and the next append row.

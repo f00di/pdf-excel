@@ -1,5 +1,6 @@
 import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.0.227/build/pdf.mjs";
 import * as XLSX from "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs";
+import { dateSerial, patchWorkbook } from "./workbook-patch.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.0.227/build/pdf.worker.mjs";
@@ -8,6 +9,14 @@ const INVALID_SHEET_TITLE_CHARS = /[\[\]:*?/\\]/g;
 const MAX_SHEET_TITLE_LENGTH = 31;
 const COLUMN_TOLERANCE = 18;
 const LOG_SHEET_NAME = "_PDF_Append_Log";
+const LOG_HEADER = ["Timestamp", "Source PDF", "Target Sheet", "Cell", "Field", "Value"];
+const AMOUNT_FIELDS = ["debit", "credit", "amount", "balance"];
+const AMOUNT_NUMBER_FORMAT = "#,##0.00";
+const DATE_NUMBER_FORMAT = "m/d/yy";
+const MONEY_CELL_PATTERN =
+  /^(?:-|\()?\$?\s*(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}\)?(?:\s?(?:CR|DR))?$/i;
+const DATE_CELL_PATTERN =
+  /^(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{1,2}-\d{1,2}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4})$/i;
 
 const APPEND_FIELDS = [
   "transaction_date",
@@ -80,6 +89,7 @@ const state = {
   targetSheetName: "",
   mapping: {},
   appendedWorkbook: null,
+  appendedBytes: null,
   appendedFilename: "",
   appendSummary: null,
   busy: false,
@@ -156,6 +166,7 @@ elements.targetSheet.addEventListener("change", () => {
 
 elements.writeMode.addEventListener("change", () => {
   state.appendedWorkbook = null;
+  state.appendedBytes = null;
   state.appendSummary = null;
   renderSheets();
   updateControls();
@@ -199,6 +210,7 @@ async function selectPdfFiles(files) {
   state.transactions = [];
   state.rawText = "";
   state.appendedWorkbook = null;
+  state.appendedBytes = null;
   state.appendSummary = null;
   elements.fileInput.value = "";
 
@@ -269,6 +281,7 @@ async function selectWorkbookFile(file) {
     state.targetSheetName = defaultTargetSheet(workbook.SheetNames);
     state.mapping = {};
     state.appendedWorkbook = null;
+    state.appendedBytes = null;
     state.appendSummary = null;
     renderWorkbookControls();
     renderMappingPreview();
@@ -292,6 +305,7 @@ async function convertSelectedPdf() {
   setStatus("Extracting PDF data...");
   setProgress(0);
   state.appendedWorkbook = null;
+  state.appendedBytes = null;
   state.appendSummary = null;
   updateControls();
 
@@ -368,6 +382,14 @@ async function appendToWorkbook() {
       elements.writeMode.value,
     );
 
+    state.appendedBytes = patchWorkbook(await state.workbookFile.arrayBuffer(), {
+      sheetName: sheet.sheetName,
+      rows: summary.patchRows,
+      highlight: true,
+      logSheetName: LOG_SHEET_NAME,
+      logHeader: LOG_HEADER,
+      logRows: summary.logRows,
+    });
     state.workbook = workbook;
     state.workbookSheets = analyzeWorkbook(workbook);
     state.appendedWorkbook = workbook;
@@ -451,8 +473,8 @@ async function extractSelectedPdfData() {
 }
 
 function downloadWorkbook() {
-  if (state.appendedWorkbook) {
-    writeWorkbookFile(state.appendedWorkbook, state.appendedFilename);
+  if (state.appendedBytes) {
+    downloadBytes(state.appendedBytes, state.appendedFilename);
     setStatus(`Downloaded ${state.appendedFilename}.`);
     return;
   }
@@ -463,7 +485,9 @@ function downloadWorkbook() {
 
   const workbook = XLSX.utils.book_new();
   for (const sheet of state.sheets) {
-    const worksheet = XLSX.utils.aoa_to_sheet(sheet.rows);
+    const worksheet = XLSX.utils.aoa_to_sheet(
+      sheet.rows.map((row) => row.map(typedExportCell)),
+    );
     XLSX.utils.book_append_sheet(workbook, worksheet, sheet.title);
   }
 
@@ -471,6 +495,39 @@ function downloadWorkbook() {
     state.files.length > 1 ? "converted_pdfs.xlsx" : outputFilename(state.file.name);
   writeWorkbookFile(workbook, filename);
   setStatus(`Downloaded ${filename}.`);
+}
+
+// PDF text arrives as strings; store money and dates as real Excel values so
+// SUM, sorting and filters work without manual conversion.
+function typedExportCell(value) {
+  const text = cleanCell(value);
+  if (MONEY_CELL_PATTERN.test(text)) {
+    const amount = parseAmount(text);
+    if (amount !== null) {
+      return { t: "n", v: amount, z: AMOUNT_NUMBER_FORMAT };
+    }
+  }
+  if (DATE_CELL_PATTERN.test(text)) {
+    const serial = dateSerial(normalizeDate(text));
+    if (serial !== null) {
+      return { t: "n", v: serial, z: DATE_NUMBER_FORMAT };
+    }
+  }
+  return value;
+}
+
+function downloadBytes(bytes, filename) {
+  const type = /\.xlsm$/i.test(filename)
+    ? "application/vnd.ms-excel.sheet.macroEnabled.12"
+    : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  const url = URL.createObjectURL(new Blob([bytes], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function writeWorkbookFile(workbook, filename) {
@@ -910,10 +967,23 @@ function transactionsFromBoaStatement(fileName, rawText, metadata) {
 
 function transactionsFromTables(fileName, tables, metadata) {
   const transactions = [];
+  let previous = null;
   for (const table of tables) {
-    const [headerIndex, mapping] = detectTableHeader(table.rows);
+    let [headerIndex, mapping] = detectTableHeader(table.rows);
     if (headerIndex === null) {
-      continue;
+      // Statements often print the header only on the first page; continue the
+      // previous table when this page has the same column layout.
+      const width = Math.max(...table.rows.map((row) => row.length), 0);
+      if (!previous || width !== previous.width) {
+        continue;
+      }
+      headerIndex = -1;
+      mapping = previous.mapping;
+    } else {
+      previous = {
+        mapping,
+        width: Math.max(...table.rows.map((row) => row.length), 0),
+      };
     }
 
     for (const row of table.rows.slice(headerIndex + 1)) {
@@ -1350,6 +1420,7 @@ function appendTransactionsToWorkbook(workbook, sheet, transactions, mapping, wr
       ? existingTransactionKeys(worksheet, sheet, mapping)
       : new Set();
   const changes = [];
+  const patchRows = [];
   let rowsAdded = 0;
   let rowsSkipped = 0;
   let targetRowIndex = Math.max(sheet.nextRow - 1, sheet.headerRowIndex + 1);
@@ -1367,12 +1438,12 @@ function appendTransactionsToWorkbook(workbook, sheet, transactions, mapping, wr
       }
     }
 
-    copyRowTemplate(
-      worksheet,
-      Math.max(sheet.headerRowIndex + 1, targetRowIndex - 1),
-      targetRowIndex,
-      mappedColumns,
-    );
+    const templateRowIndex = Math.max(sheet.headerRowIndex + 1, targetRowIndex - 1);
+    const patchRow = {
+      row: targetRowIndex + 1,
+      template: templateRowIndex === targetRowIndex ? null : templateRowIndex + 1,
+      cells: copyRowTemplate(worksheet, templateRowIndex, targetRowIndex, mappedColumns),
+    };
 
     let wroteAny = false;
     Object.entries(mapping).forEach(([field, column]) => {
@@ -1383,12 +1454,14 @@ function appendTransactionsToWorkbook(workbook, sheet, transactions, mapping, wr
 
       const colIndex = columnToIndex(column);
       const address = XLSX.utils.encode_cell({ r: targetRowIndex, c: colIndex });
-      const previous = worksheet[address] || {};
-      worksheet[address] = {
-        ...previous,
-        ...cellForValue(field, value),
-        s: highlightedStyle(previous.s),
-      };
+      const cell = cellForValue(field, value);
+      worksheet[address] = { ...(worksheet[address] || {}), ...cell };
+      delete worksheet[address].f;
+      patchRow.cells.push({
+        col: colIndex + 1,
+        kind: cell.t === "s" ? "string" : AMOUNT_FIELDS.includes(field) ? "number" : "date",
+        value: cell.t === "s" ? cell.v : field === "transaction_date" ? value : cell.v,
+      });
       changes.push({
         sheet: sheet.sheetName,
         cell: address,
@@ -1402,6 +1475,7 @@ function appendTransactionsToWorkbook(workbook, sheet, transactions, mapping, wr
     });
 
     if (wroteAny) {
+      patchRows.push(patchRow);
       rowsAdded += 1;
       existingKeys.add(transactionKey);
       targetRowIndex += 1;
@@ -1411,18 +1485,20 @@ function appendTransactionsToWorkbook(workbook, sheet, transactions, mapping, wr
   });
 
   worksheet["!ref"] = XLSX.utils.encode_range(range);
-  appendLogSheet(workbook, changes);
-  return { rowsAdded, rowsSkipped, changes };
+  const logRows = logRowsForChanges(changes);
+  appendLogSheet(workbook, logRows);
+  return { rowsAdded, rowsSkipped, changes, patchRows, logRows };
 }
 
 function copyRowTemplate(worksheet, sourceRowIndex, targetRowIndex, mappedColumns) {
+  const formulaCells = [];
   if (sourceRowIndex < 0 || sourceRowIndex === targetRowIndex) {
-    return;
+    return formulaCells;
   }
 
   const range = worksheet["!ref"] ? XLSX.utils.decode_range(worksheet["!ref"]) : null;
   if (!range) {
-    return;
+    return formulaCells;
   }
 
   for (let colIndex = range.s.c; colIndex <= range.e.c; colIndex += 1) {
@@ -1435,23 +1511,34 @@ function copyRowTemplate(worksheet, sourceRowIndex, targetRowIndex, mappedColumn
     }
 
     const targetCell = worksheet[targetAddress] || {};
-    if (sourceCell.s) {
-      targetCell.s = { ...sourceCell.s };
-    }
-    if (!mappedColumns.has(column) && sourceCell.f) {
+    if (!mappedColumns.has(column) && sourceCell.f && !targetCell.f) {
       targetCell.f = translateFormula(
         sourceCell.f,
         sourceRowIndex + 1,
         targetRowIndex + 1,
       );
       targetCell.t = sourceCell.t;
+      formulaCells.push({ col: colIndex + 1, kind: "formula", value: targetCell.f });
     }
     worksheet[targetAddress] = targetCell;
   }
+  return formulaCells;
 }
 
-function appendLogSheet(workbook, changes) {
-  if (!changes.length) {
+function logRowsForChanges(changes) {
+  const timestamp = new Date().toISOString().slice(0, 19);
+  return changes.map((change) => [
+    timestamp,
+    change.source_pdf || "",
+    change.sheet,
+    change.cell,
+    FIELD_LABELS[change.field] || change.field,
+    change.value,
+  ]);
+}
+
+function appendLogSheet(workbook, logRows) {
+  if (!logRows.length) {
     return;
   }
 
@@ -1460,22 +1547,10 @@ function appendLogSheet(workbook, changes) {
   if (worksheet) {
     rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
   } else {
-    rows = [["Timestamp", "Source PDF", "Target Sheet", "Cell", "Field", "Value"]];
+    rows = [LOG_HEADER];
     workbook.SheetNames.push(LOG_SHEET_NAME);
   }
-
-  const timestamp = new Date().toISOString().slice(0, 19);
-  changes.forEach((change) => {
-    rows.push([
-      timestamp,
-      change.source_pdf || "",
-      change.sheet,
-      change.cell,
-      FIELD_LABELS[change.field] || change.field,
-      change.value,
-    ]);
-  });
-  workbook.Sheets[LOG_SHEET_NAME] = XLSX.utils.aoa_to_sheet(rows);
+  workbook.Sheets[LOG_SHEET_NAME] = XLSX.utils.aoa_to_sheet([...rows, ...logRows]);
 }
 
 function rowHasMappedValues(worksheet, rowIndex, mappedColumns) {
@@ -1540,23 +1615,19 @@ function transactionFieldValue(transaction, field) {
 }
 
 function cellForValue(field, value) {
-  if (["debit", "credit", "amount", "balance"].includes(field)) {
+  if (AMOUNT_FIELDS.includes(field)) {
     const numeric = Number(value);
     if (!Number.isNaN(numeric)) {
       return { t: "n", v: numeric };
     }
   }
+  if (field === "transaction_date") {
+    const serial = dateSerial(value);
+    if (serial !== null) {
+      return { t: "n", v: serial, z: DATE_NUMBER_FORMAT };
+    }
+  }
   return { t: "s", v: String(value) };
-}
-
-function highlightedStyle(style = {}) {
-  return {
-    ...style,
-    fill: {
-      patternType: "solid",
-      fgColor: { rgb: "FFF2CC" },
-    },
-  };
 }
 
 function translateFormula(formula, sourceRow, targetRow) {
@@ -1638,6 +1709,7 @@ function renderMappingPreview(issues = []) {
     select.addEventListener("change", () => {
       state.mapping[field] = select.value;
       state.appendedWorkbook = null;
+      state.appendedBytes = null;
       state.appendSummary = null;
       updateControls();
     });
@@ -1710,6 +1782,7 @@ function renderAppendSummary() {
   const transactions = {
     title: "Extracted transactions",
     source: "append",
+    total: `${state.transactions.length} row${state.transactions.length === 1 ? "" : "s"}`,
     rows: [
       ["Date", "Description", "Debit", "Credit", "Amount"],
       ...state.transactions.slice(0, 12).map((transaction) => [
@@ -1726,6 +1799,7 @@ function renderAppendSummary() {
   const changes = {
     title: "Changed cells",
     source: "log",
+    total: `${summary.changes.length} cell${summary.changes.length === 1 ? "" : "s"}`,
     rows: [
       ["Sheet", "Cell", "Field", "Value"],
       ...summary.changes.slice(0, 12).map((change) => [
@@ -1755,9 +1829,11 @@ function sheetPreviewItem(sheet) {
 
   const meta = document.createElement("p");
   const columnCount = Math.max(...sheet.rows.map((row) => row.length), 0);
-  meta.textContent = `${sheet.rows.length} row${
-    sheet.rows.length === 1 ? "" : "s"
-  } / ${columnCount} column${columnCount === 1 ? "" : "s"}`;
+  meta.textContent = sheet.total
+    ? `${sheet.total}, first ${Math.min(sheet.rows.length - 1, 4)} shown`
+    : `${sheet.rows.length} row${
+        sheet.rows.length === 1 ? "" : "s"
+      } / ${columnCount} column${columnCount === 1 ? "" : "s"}`;
 
   const grid = previewGrid(sheet.rows);
 
@@ -1814,6 +1890,7 @@ function resetPdfState() {
   state.transactions = [];
   state.rawText = "";
   state.appendedWorkbook = null;
+  state.appendedBytes = null;
   state.appendedFilename = "";
   state.appendSummary = null;
   elements.fileInput.value = "";
@@ -1832,6 +1909,7 @@ function resetWorkbookState() {
   state.targetSheetName = "";
   state.mapping = {};
   state.appendedWorkbook = null;
+  state.appendedBytes = null;
   state.appendedFilename = "";
   state.appendSummary = null;
   elements.workbookInput.value = "";
@@ -1967,6 +2045,10 @@ function parseAmount(value) {
 }
 
 function normalizeDate(value) {
+  // SheetJS returns workbook dates as UTC midnight.
+  if (value instanceof Date && !Number.isNaN(value.valueOf())) {
+    return value.toISOString().slice(0, 10);
+  }
   const text = cleanCell(value);
   if (!text) {
     return "";
@@ -1985,9 +2067,15 @@ function normalizeDate(value) {
 
   const parsed = new Date(text.replace(/\./g, ""));
   if (!Number.isNaN(parsed.valueOf())) {
-    return parsed.toISOString().slice(0, 10);
+    return localIsoDate(parsed);
   }
   return "";
+}
+
+// toISOString() converts to UTC, which shifts local midnight to the previous
+// day east of Greenwich.
+function localIsoDate(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
 function amountTextIsNegative(text) {
